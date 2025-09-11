@@ -1,0 +1,672 @@
+---
+title: "soe.10"
+---
+
+```{r}
+library(haven)
+library(ggplot2)
+library(dplyr)
+
+df <- read_sav("nhaplieu_theducthethao.sav")
+head(df)
+
+df$gioi <- factor(df$gioi, levels = c(1,2), labels = c("Male", "Female"))
+
+# Check
+#table(df$gioi)
+
+gender_pct <- prop.table(table(df$gioi)) * 100
+gender_pct
+
+avg_hours <- mean(df$sogiotdtt, na.rm = TRUE)
+avg_hours
+
+summary_df <- data.frame(
+  Male_pct = round(gender_pct["Male"], 2),
+  Female_pct = round(gender_pct["Female"], 2),
+  Avg_activity_hours = round(avg_hours, 2)
+)
+
+summary_df
+
+#234
+df$age_group_label <- factor(df$nhomtuoi, levels=1:4, labels=c("<18","18-35","36-45",">45"))
+
+gender_counts <- table(df$gioi)
+pie(gender_counts, labels=paste(names(gender_counts), round(prop.table(gender_counts)*100,1), "%"), 
+    col=c("skyblue","pink"), main="Gender Percentage")
+
+ggplot(df, aes(x=age_group_label)) +
+  geom_bar(fill="steelblue") +
+  labs(x="Age Group", y="Count", title="Participants by Age Group")
+
+avg_hours_male <- mean(df$sogiotdtt[df$gioi=="Male"], na.rm=TRUE)
+cat("Average activity hours for Male:", round(avg_hours_male,2), "\n")
+
+count_female_age3 <- sum(df$gioi=="Female" & df$nhomtuoi==3, na.rm=TRUE)
+cat("Count of Female in age group 3 (36-45):", count_female_age3, "\n")
+```
+
+```{r}
+
+library(haven)
+library(ggplot2)
+library(dplyr)
+
+# Load and recode
+df <- read_sav("data/nhaplieu_theducthethao.sav") %>%
+  mutate(
+    gender = factor(gioi, levels = c(1,2), labels = c("Male","Female")),
+    age_group = factor(nhomtuoi, levels = 1:4, labels = c("<18","18-35","36-45",">45"))
+  )
+
+# Summary stats in one table
+summary_df <- df %>%
+  summarise(
+    Male_pct = round(mean(gender=="Male")*100,2),
+    Female_pct = round(mean(gender=="Female")*100,2),
+    Avg_activity_hours = round(mean(sogiotdtt, na.rm=TRUE),2),
+    Avg_hours_male = round(mean(sogiotdtt[gender=="Male"], na.rm=TRUE),2),
+    Count_female_age3 = sum(gender=="Female" & nhomtuoi==3, na.rm=TRUE)
+  )
+
+summary_df
+
+df %>%
+  count(gender) %>%
+  ggplot(aes(x="", y=n, fill=gender)) +
+  geom_col() +
+  coord_polar(theta="y") +
+  geom_text(aes(label = paste0(round(n/sum(n)*100,1),"%")), position=position_stack(vjust=0.5)) +
+  labs(title="Gender Percentage") +
+  theme_void() +
+  scale_fill_manual(values=c("skyblue","pink"))
+
+ggplot(df, aes(x=age_group, fill=gender)) +
+  geom_bar(position="dodge") +
+  labs(x="Age Group", y="Count", title="Participants by Age Group and Gender") +
+  scale_fill_manual(values=c("skyblue","pink"))
+```
+
+```{r}
+df <- read_sav("data/University of Florida graduate salaries.sav")
+head(df)
+```
+
+```{r}
+# =========================
+# Packages
+# =========================
+# Install if needed:
+# install.packages(c("tidyverse", "haven", "broom"))
+
+library(tidyverse)
+library(haven)   # read_sav
+library(broom)   # tidy(), augment(), glance()
+
+# =========================
+# 1) Load data
+# =========================
+# Adjust the path if needed
+#path <- "Du bao bang mo hinh nhan qua san luong _ CPQC Hoahong quy.sav"
+
+df <- as.data.frame(read_sav("Du bao bang mo hinh nhan qua san luong _ CPQC Hoahong quy.sav"))
+
+# If you did not use janitor::clean_names(), ensure the names are exactly:
+# "nam", "quy", "Sanluong"
+# If you used clean_names(), they will likely be "nam", "quy", "sanluong".
+# Set the response/field names accordingly below.
+
+# For clarity, let's standardize the variable names explicitly:
+# (Uncomment/adjust if needed based on your actual column names)
+# names(df)[names(df) == "Sanluong"] <- "Sanluong"  # ensure exact spelling
+
+# =========================
+# 2) Sort by year and quarter
+# =========================
+# If you *did not* clean names, use `arrange(nam, quy)` and `Sanluong`
+# If you *did* clean names, use `arrange(nam, quy)` and `sanluong`
+use_clean_names <- "sanluong" %in% names(df)
+
+if (use_clean_names) {
+  df <- df %>%
+    arrange(nam, quy) %>%
+    mutate(time_index = row_number())
+  
+  y_col <- "sanluong"
+} else {
+  df <- df %>%
+    arrange(nam, quy) %>%
+    mutate(time_index = dplyr::row_number())
+  
+  y_col <- "Sanluong"
+}
+
+# =========================
+# 3) Fit linear regression: Sanluong ~ time_index
+# =========================
+formula_str <- as.formula(paste0(y_col, " ~ time_index"))
+model <- lm(formula_str, data = df)
+
+# Predictions
+df$predicted <- predict(model, newdata = df)
+
+# =========================
+# 4) Metrics: R², Adjusted R², MAPE
+# =========================
+s <- summary(model)
+r2  <- s$r.squared
+adj <- s$adj.r.squared
+
+# MAPE helper (guard against division by zero)
+mape <- function(y_true, y_pred) {
+  # Remove cases where y_true == 0 to avoid Inf
+  idx <- which(y_true != 0 & !is.na(y_true) & !is.na(y_pred))
+  mean(abs((y_true[idx] - y_pred[idx]) / y_true[idx])) * 100
+}
+
+mape_value <- mape(df[[y_col]], df$predicted)
+
+cat("Regression Summary:\n")
+print(s)
+cat(sprintf("R²: %.4f\n", r2))
+cat(sprintf("Adjusted R²: %.4f\n", adj))
+cat(sprintf("MAPE: %.2f%%\n", mape_value))
+
+# =========================
+# 5) Bounds (±20% around predicted to match your Julia code)
+# =========================
+df <- df %>%
+  mutate(
+    upper = predicted * 1.20,
+    lower = predicted * 0.80
+  )
+
+# =========================
+# 6) Plot: Actual vs Predicted + Bounds
+# =========================
+# Vietnamese labels preserved
+p <- ggplot(df, aes(x = time_index)) +
+  geom_line(aes(y = .data[[y_col]], color = "Actual"), linewidth = 1) +
+  geom_point(aes(y = .data[[y_col]], color = "Actual"), size = 1.8) +
+  geom_line(aes(y = predicted, color = "Predicted"), linewidth = 1) +
+  geom_line(aes(y = upper, color = "Upper Bound"), linetype = "dashed") +
+  geom_line(aes(y = lower, color = "Lower Bound"), linetype = "dashed") +
+  scale_color_manual(
+    name = NULL,
+    values = c(
+      "Actual" = "steelblue",
+      "Predicted" = "firebrick",
+      "Upper Bound" = "gray40",
+      "Lower Bound" = "gray40"
+    )
+  ) +
+  labs(
+    x = "Time Index (1 to n)",
+    y = "Sản lượng",
+    title = "Regression of Sản lượng over Time"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")
+
+print(p)
+
+# =========================
+# 7) (Optional) Save plot
+# =========================
+# ggsave("sanluong_regression.png", p, width = 10, height = 6, dpi = 300)
+
+```
+
+df \<- as.data.frame(read_sav("Du bao bang mo hinh nhan qua san luong \_ CPQC Hoahong quy.sav"))
+
+```{r}
+# =========================
+# Packages
+# =========================
+# Install if needed:
+# install.packages(c("tidyverse", "haven", "broom", "yardstick"))
+
+library(tidyverse)
+library(haven)      # read_sav
+library(broom)      # lm summaries (optional)
+library(yardstick)  # metrics
+
+
+# =========================
+# 1) Load data
+# =========================
+df <- as.data.frame(read_sav("Du bao bang mo hinh nhan qua san luong _ CPQC Hoahong quy.sav"))
+
+# Detect response column name (after clean_names, it's likely "sanluong")
+y_col <- if ("sanluong" %in% names(df)) "sanluong" else "Sanluong"
+
+# =========================
+# 2) Sort by year and quarter, add time index
+# =========================
+df <- df %>%
+  arrange(nam, quy) %>%
+  mutate(time_index = dplyr::row_number())
+
+# Ensure response is numeric (SPSS labels can sometimes complicate this)
+df[[y_col]] <- as.numeric(df[[y_col]])
+
+# =========================
+# 3) Fit linear regression: Sanluong ~ time_index
+# =========================
+form <- as.formula(paste0(y_col, " ~ time_index"))
+model <- lm(form, data = df)
+
+# Predictions
+df <- df %>%
+  mutate(predicted = predict(model, newdata = df))
+
+# =========================
+# 4) Metrics with yardstick (RMSE, MAE, MAPE, R²)
+# =========================
+# Yardstick expects a tibble with 'truth' and 'estimate'
+df_metrics <- tibble(
+  truth    = df[[y_col]],
+  estimate = df$predicted
+)
+
+# Combine metrics into one callable set
+
+reg_metrics <- yardstick::metric_set(
+  yardstick::rmse,
+  yardstick::mae,
+  yardstick::mape,  # yardstick's mape (fraction, not %)
+  yardstick::rsq    # traditional R²
+)
+
+metrics_all <- reg_metrics(df_metrics, truth = truth, estimate = estimate, na_rm = TRUE)
+
+
+cat("\n=========================\nYardstick Metrics\n=========================\n")
+print(metrics_display)
+
+
+# Still want the classic lm summary? (useful for coefficients)
+cat("\n=========================\nRegression Summary (lm)\n=========================\n")
+print(summary(model))
+
+# =========================
+# 5) Bounds (±20% around predicted, to match your Julia)
+# =========================
+df <- df %>%
+  mutate(
+    upper = predicted * 1.20,
+    lower = predicted * 0.80
+  )
+
+# =========================
+# 6) Plot: Actual vs Predicted + Bounds
+# =========================
+p <- ggplot(df, aes(x = time_index)) +
+  geom_line(aes(y = .data[[y_col]], color = "Actual"), linewidth = 1) +
+  geom_point(aes(y = .data[[y_col]], color = "Actual"), size = 1.8) +
+  geom_line(aes(y = predicted, color = "Predicted"), linewidth = 1) +
+  geom_line(aes(y = upper, color = "Upper Bound"), linetype = "dashed") +
+  geom_line(aes(y = lower, color = "Lower Bound"), linetype = "dashed") +
+  scale_color_manual(
+    name = NULL,
+    values = c(
+      "Actual" = "steelblue",
+      "Predicted" = "firebrick",
+      "Upper Bound" = "gray40",
+      "Lower Bound" = "gray40"
+    )
+  ) +
+  labs(
+    x = "Time Index (1 to n)",
+    y = "Sản lượng",
+    title = "Regression of Sản lượng over Sequential Time"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")
+
+print(p)
+
+# =========================
+# 7) (Optional) Save outputs
+# =========================
+# ggsave("sanluong_regression.png", p, width = 10, height = 6, dpi = 300)
+# readr::write_csv(metrics_display, "metrics_yardstick.csv")
+
+```
+
+```{r}
+library(forecast)
+time_series_data <- 1:36 * 0.05 # Mock data
+
+forecast::ets(
+ y = time_series_data,
+ model = "MAN", # Additive level and trend, no seasonality
+ alpha = 0.30 # Custom alpha level smoothing parameter
+)
+
+fit <- ets(time_series_data) # Let the algorithm optimize parameters 
+fit
+
+forecast::forecast(fit, h = 3)
+```
+
+```{r}
+# =========================
+# Packages
+# =========================
+# install.packages(c("tidyverse", "haven", "forecast", "yardstick"))  # Run once if needed
+library(tidyverse)
+library(haven)       # For read_sav
+library(forecast)    # For hw(), forecast(), autoplot()
+library(yardstick)   # For metrics (rmse, mae, mape, rsq)
+
+# =========================
+# 1) Load, cleanse, and prep
+# =========================
+df <- as.data.frame(read_sav("Du bao bang mo hinh nhan qua san luong _ CPQC Hoahong quy.sav"))
+
+# Assume response column is "sanluong" (adjust if needed)
+y_col <- "Sanluong"
+
+# Cleanse: Ensure types, handle NAs, sort by time
+df[[y_col]] <- as.numeric(df[[y_col]])
+df$nam <- as.integer(df$nam)
+df$quy <- as.integer(df$quy)
+df <- df %>% 
+  drop_na(nam, quy, !!sym(y_col)) %>%  # Remove rows with NA in key columns
+  arrange(nam, quy)                    # Sort by year and quarter
+
+# Create time index (quarterly, starting from first)
+df <- df %>% 
+  mutate(time_quarter = row_number())  # Simple sequential time index for lm
+
+# Build quarterly time series
+ts_y <- ts(df[[y_col]],
+           start = c(min(df$nam, na.rm = TRUE), min(df$quy, na.rm = TRUE)),
+           frequency = 4)
+
+# =========================
+# 2) Fit Linear Model: sanluong ~ time_quarter
+# =========================
+lm_model <- lm(as.formula(paste(y_col, "~ time_quarter")), data = df)
+
+# Summary of LM (optional, for inspection)
+summary(lm_model)
+
+# =========================
+# 3) Fit Holt-Winters
+# =========================
+use_multiplicative <- all(ts_y > 0)
+
+if (!use_multiplicative) {
+  message("Non-positive values detected. Using additive seasonality.")
+}
+
+hw_model <- hw(
+  y = ts_y,
+  seasonal = if (use_multiplicative) "multiplicative" else "additive",
+  damped = FALSE
+)
+
+summary(hw_model)
+# Forecast horizon (quarters)
+h <- 4
+fc_hw <- forecast(hw_model, h = h)
+
+# =========================
+# 4) Metrics (for Holt-Winters in-sample)
+# =========================
+compute_metrics <- function(truth, estimate) {
+  df_metrics <- tibble(truth = truth, estimate = estimate)
+  reg_metrics <- metric_set(rmse, mae, mape, rsq)
+  metrics <- reg_metrics(df_metrics, truth, estimate, na_rm = TRUE) %>%
+    mutate(value = if_else(.metric == "mape", .estimate * 100, .estimate),
+           units = case_when(
+             .metric == "mape" ~ "%",
+             .metric == "rsq"  ~ "",
+             TRUE              ~ "units"
+           )) %>%
+    select(metric = .metric, value, units)
+  return(metrics)
+}
+
+metrics_hw <- compute_metrics(as.numeric(ts_y), as.numeric(fitted(hw_model)))
+
+cat("\n=========================\nHolt-Winters In-sample Metrics\n=========================\n")
+print(metrics_hw)
+
+# Optional: LM in-sample metrics
+metrics_lm <- compute_metrics(df[[y_col]], fitted(lm_model))
+cat("\n=========================\nLinear Model In-sample Metrics\n=========================\n")
+print(metrics_lm)
+
+# =========================
+# 5) Plot: Holt-Winters fit + forecast
+# =========================
+p_hw <- autoplot(fc_hw, PI = TRUE) +
+  autolayer(fitted(hw_model), series = "Holt-Winters (Fitted)") +
+  scale_colour_manual(
+    name = NULL,
+    values = c(
+      "Data" = "#2C7FB8",
+      "Point Forecast" = "#000000",
+      "Holt-Winters (Fitted)" = "#D55E00"
+    )
+  ) +
+  scale_fill_grey(name = "Prediction intervals", start = 0.85, end = 0.65) +
+  labs(
+    title = paste0("Holt-Winters (", if (use_multiplicative) "Multiplicative" else "Additive", ")"),
+    x = "Time (Quarterly)",
+    y = "Sản lượng"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")
+
+print(p_hw)
+
+##
+lm_model2 <-lm(as.formula(paste(y_col, "~ time_quarter + hoahong + CPQC")), data = df)
+summary(lm_model2)
+
+metrics_lm2 <- compute_metrics(df$Sanluong, fitted(lm_model2))
+cat("\n=========================\nLinear Model 2 In-sample Metrics\n=========================\n")
+print(metrics_lm2)
+# Example: forecast next 4 quarters (dummy future values here — replace with real ones!)
+future_df <- tibble(
+  time_quarter = max(df$time_quarter) + 1:4,
+  hoahong = c(100, 105, 110, 115),   # replace with your scenario/forecasted values
+  CPQC    = c(200, 210, 220, 230)    # replace with your scenario/forecasted values
+)
+
+fc_lm2 <- predict(lm_model2, newdata = future_df, interval = "prediction")
+cbind(future_df, fc_lm2)
+df$Fitted_lm2 <- fitted(lm_model2)
+
+p_lm2 <- ggplot(df, aes(x = time_quarter, y = Sanluong)) +
+  geom_line(color = "#2C7FB8") +
+  geom_line(aes(y = Fitted_lm2), color = "#D55E00") +
+  labs(title = "Linear Model 2: Sanluong ~ time_quarter + hoahong + CPQC",
+       x = "Time (Quarter)", y = "Sản lượng") +
+  theme_minimal(base_size = 12)
+
+print(p_lm2)
+
+library(forecast)
+
+# Response
+y <- ts(df$Sanluong, frequency = 4)
+
+# Regressors
+X <- as.matrix(df[, c("time_quarter", "hoahong", "CPQC")])
+
+# Fit ARIMA with xreg
+fit_arima_xreg <- auto.arima(y, xreg = X)
+
+summary(fit_arima_xreg)
+```
+
+```{r}
+# --- Packages ---
+library(haven)
+library(dplyr)
+
+# --- Load & prep ---
+df <- read_sav("Du bao bang mo hinh nhan qua san luong _ CPQC Hoahong quy.sav") |>
+  as.data.frame() |>
+  mutate(
+    nam = as.integer(nam),
+    quy = as.integer(quy)
+  ) |>
+  arrange(nam, quy) |>
+  # create time trend & seasonal dummies that your models reference
+  mutate(
+    time_quarter = seq_len(n()),
+    Q2 = as.integer(quy == 2),
+    Q3 = as.integer(quy == 3),
+    Q4 = as.integer(quy == 4)
+  )
+
+# --- Your target column ---
+y_col <- "Sanluong"   # e.g. "sanluong"
+
+# --- Recreate your 4 lm() models exactly ---
+
+# #01: y ~ time_quarter
+f1 <- as.formula(paste(y_col, "~ time_quarter"))
+lm_model  <- lm(f1, data = df)
+cat("\n=== #01 lm_model: y ~ time_quarter ===\n")
+print(summary(lm_model))
+
+# #02: y ~ time_quarter + hoahong + CPQC
+f2 <- as.formula(paste(y_col, "~ time_quarter + hoahong + CPQC"))
+lm_model2 <- lm(f2, data = df)
+cat("\n=== #02 lm_model2: y ~ time_quarter + hoahong + CPQC ===\n")
+print(summary(lm_model2))
+
+# #03: y ~ time_quarter + hoahong + CPQC + Q2 + Q3 + Q4
+f3 <- as.formula(paste(y_col, "~ time_quarter + hoahong + CPQC + Q2 + Q3 + Q4"))
+lm_model3 <- lm(f3, data = df)
+cat("\n=== #03 lm_model3: y ~ time_quarter + hoahong + CPQC + Q2 + Q3 + Q4 ===\n")
+print(summary(lm_model3))
+
+# #04: y ~ time_quarter + CPQC + Q2 + Q3 + Q4 (drop hoahong)
+f4 <- as.formula(paste(y_col, "~ time_quarter + CPQC + Q2 + Q3 + Q4"))
+lm_model4 <- lm(f4, data = df)
+cat("\n=== #04 lm_model4: y ~ time_quarter + CPQC + Q2 + Q3 + Q4 ===\n")
+print(summary(lm_model4))
+
+# --- Optional: evaluate out-of-sample (holdout) like we did for HW/ETS ---
+# Take the last h quarters as test
+h_test <- 4
+n <- nrow(df)
+split_idx <- n - h_test
+
+train <- df[1:split_idx, ]
+test  <- df[(split_idx + 1):n, ]
+
+# Safe MAPE (avoids division by zero)
+safe_mape <- function(actual, pred) {
+  nz <- actual != 0
+  mean(abs((pred[nz] - actual[nz]) / actual[nz])) * 100
+}
+
+eval_lm <- function(formula, train, test, y) {
+  fit <- lm(formula, data = train)
+  preds <- predict(fit, newdata = test)
+  actual <- test[[y]]
+  rmse <- sqrt(mean((preds - actual)^2, na.rm = TRUE))
+  mae  <- mean(abs(preds - actual), na.rm = TRUE)
+  mape <- safe_mape(actual, preds)
+  data.frame(RMSE = rmse, MAE = mae, MAPE = mape)
+}
+
+metrics_lm <- rbind(
+  cbind(model = "#01 time",            eval_lm(f1, train, test, y_col)),
+  cbind(model = "#02 time+hoahong+CPQC", eval_lm(f2, train, test, y_col)),
+  cbind(model = "#03 time+hoahong+CPQC+Qdums", eval_lm(f3, train, test, y_col)),
+  cbind(model = "#04 time+CPQC+Qdums", eval_lm(f4, train, test, y_col))
+)
+
+cat("\n=== Holdout metrics (last", h_test, "quarters) for your 4 lm models ===\n")
+print(metrics_lm, row.names = FALSE)
+
+
+```
+
+# Assignment4
+
+```{r}
+library(rio)
+library(car)
+library(lmtest)
+library(gmodels)
+
+data <- rio::import("Table1_1.dta")
+str(data)
+summary(data)
+aggregate(wage~female, data=data, FUN=mean)
+aggregate(wage~female + nonwhite, data=data, FUN=mean)
+
+psych::describe(data,fast=F)
+
+table_gender_race <- table(data$female,data$nonwhite)
+prop.table(table_gender_race)
+
+CrossTable(data$female, data$nonwhite, prop.r = TRUE, prop.c = TRUE, prop.t = TRUE)
+tabyl(data,female,nonwhite)
+tabyl(data, female)
+
+prop.table(table_gender_race)
+hist(data$wage,main="Histogram of Wage", xlab="Wage")
+hist(log(data$wage),main="Histogram of Log Wagw", xlab="Log Wage")
+plot(data$education,data$wage,xlab="Year of Education",ylab="Wage", main="Education by Wage")
+t.test(wage~female,data=data)
+aov(wage~female*age,data=data)
+summary(aov(wage~female*age,data=data))
+model <- lm(wage ~ female + nonwhite + union + education + exper, data = data)
+summary(model)
+data$predicted_wage <- predict(model)
+vif(model)
+bptest(model)
+
+dplyr::glimpse(data)
+Hmisc::describe(data)
+skimr::skim(data)
+skimr::skim(rio::import("2.dta"))
+```
+
+```{r}
+library(rio)
+library(margins)
+
+data <- import("Table8_1.dta")
+
+gmodels::CrossTable(data$smoker,data$age)
+
+logit_model <- glm(smoker ~ pcigs79 + age*educ + educ*income, data = data, family = binomial(link = "logit"))
+summary(logit_model)
+  
+data$predicted_smoker_prob <- predict(logit_model, type = "response")
+
+
+plot(data$educ, data$predicted_smoker_prob, xlab = "Education", ylab = "Predicted Probability of Smoking")
+
+mfx <- margins(logit_model)
+summary(mfx)
+plot(mfx)
+
+smoker1 <- data.frame(age = 63, educ = 10, income = 20000, pcigs79 = 60)
+summary(margins(logit_model,data=smoker1))
+
+probit_model <- glm(smoker ~ pcigs79 + age*educ + educ*income, data = data, family = binomial(link = "probit"))
+summary(probit_model)
+
+
+AIC(logit_model, probit_model)
+BIC(logit_model, probit_model)
+summary(margins(logit_model))
+summary(margins(probit_model))
+
+
+```

@@ -1,0 +1,239 @@
+---
+title: "BÀI TẬP 5"
+format: docx
+execute:
+  echo: false   # hides all code globally
+  warning: false
+  message: false
+---
+
+## **Phần 1: Thống kê mô tả, phân tích phương sai và hồi quy tuyến tính**
+
+## 1. Mô tả dạng dữ liệu
+
+```{r}
+library(rio)
+library(car)
+library(lmtest)
+library(gmodels)
+
+data <- import("Table1_1.dta")
+psych::describe(data,fast=F)
+```
+
+## 2. Mô tả các biến trong bộ dữ liệu
+
+```{r}
+summary(data)
+```
+
+## 3. Tạo một bảng kết quả cho biết giá trị trung bình của tiền lương (wage) phân theo giới tính
+
+```{r}
+aggregate(wage~female, data=data, FUN=mean)
+```
+
+## 4. Tạo một bảng kết quả cho biết giá trị trung bình của tiền lương (wage) phân theo cả giới tính và sắc tộc
+
+```{r}
+
+aggregate(wage~female + nonwhite, data=data, FUN=mean)
+```
+
+## 5. Tạo bảng kết hợp giữa hai biến định tính giới tính (female) và sắc tộc (nonwhite). Chú ý rằng, bảng này không chỉ cho biết số lượng, mà còn cho biết tỷ lệ %, tổng theo dòng, tổng theo cột. Gợi ý lệnh: tab (option: row)
+
+```{r}
+CrossTable(data$female, data$nonwhite, prop.r = TRUE, prop.c = TRUE, prop.t = TRUE)
+```
+
+## 6. Vẽ biểu đồ histogram cho biến wage và lnwage.
+
+```{r}
+hist(data$wage,main="Histogram of Wage", xlab="Wage")
+hist(log(data$wage),main="Histogram of Log Wage", xlab="Log Wage")
+```
+
+## 7. Vẽ biểu đồ phân tán thể hiện tác động của số năm đi học đến tiền lương
+
+```{r}
+plot(data$education,data$wage,xlab="Year of Education",ylab="Wage", main="Education by Wage")
+```
+
+## 8. Có nhận định rằng không có sự khác biệt về tiền lương trung bình giữa nam và nữ. Anh chị hãy kiểm tra nhận định trên. Gợi ý lệnh: ttest
+
+```{r}
+t.test(wage~female,data=data)
+```
+
+p-value \< 1%, có sự khác biệt thống kê đáng kể giữa tiền lương trung bình của nữ vả nam.
+
+## 9. Có nhận định rằng sự khác nhau về tiền lương giữa nam và nữ, giữa các độ tuổi khác nhau là không có ý nghĩa thống kê. Anh chị hãy kiểm tra nhận định trên. Gợi ý lệnh: oneway.
+
+```{r}
+summary(aov(wage~female*age,data=data))
+```
+
+**Giới tính:**
+
+-   F=74.41, p \< 2e-16 → có ý nghĩa thống kê
+
+-   Giới tính có ảnh ưởng mạnh đến tiền lương.
+
+**Tuổi:**
+
+-   F=117.62, p \< 2e-16 → có ý nghĩa thống kê
+
+-   Tuổi có ảnh hưởng mạnh đến tiền lương.
+
+**Giới tính:tuổi**
+
+-   F=15.28, p\< 9.78e-05 → có ý nghĩa thống kê
+
+-   Ảnh hưởng của tuổi đến tiền lương khác nhau giữa nam và nữ.
+
+## 10. Thực hiện hồi quy tuyến tính cho mô hình sau và giải thích kết quả: wage = α_0 + α_1female + α_2nonwhite + α_3union + α_4education + α_5exper + ε
+
+```{r}
+model <- lm(wage ~ female + nonwhite + union + education + exper, data = data)
+summary(model)
+```
+
+**Giải thích kết quả:**
+
+Với mức ý nghĩa 5%
+
+-   Giữ các yếu tố khác không đổi, trung bình tiền lương của nữ thấp thua tiền lương nam 3.07 triệu đồng.
+
+-   Giữ các yếu tố khác không đổi, trung bình tiền lương của công nhân da màu thấp thua tiền lương công nhân da trắng 1.57 triệu đồng.
+
+-   Giữ các yếu tố khác không đổi, trung bình tiền lương của công nhân tham gia công đoàn nhiều hơn tiền lương công nhân không tham gia công đoàn 1.10 triệu đồng.
+
+-   Giữ các yếu tố khác không đổi, với mỗi năm đi học tăng thêm, tiền lương trung bình của công nhân tăng thêm 1.37 triệu đồng.
+
+-   Giữ các yếu tố khác không đổi, với mỗi năm kinh nghiệm làm việc tiềm năng tăng thêm, tiền lương trung bình của công nhân tăng thêm 0.17 triệu đồng.
+
+Mô hình có R bình phương hiệu chỉnh bằng 0,3207, tức là các biến độc lập trong mô hình giải thích khoảng 32% biến thiên của tiền lương.
+
+## 11. Dự báo tiền lương được ước lượng từ mô hình trên. Gợi ý lệnh: predict.
+
+```{r}
+data$predicted_wage <- predict(model)
+```
+
+## 12. Kiểm định giả thuyết rằng tất cả các biến độc lập đồng thời không tác động đến tiền lương.
+
+```{r}
+summary(model)
+```
+
+F-test ( p-value: \< 2.2e-16 ) xác nhận rằng ít nhất có một biến giải thích đóng góp đáng kể vào biến thiên tiền lương.
+
+## 13. Anh chị nhận xét gì về hiện tượng đa cộng tuyến, hiện tượng phương sai thay đổi của mô hình trên.
+
+```{r}
+vif(model)
+bptest(model)
+```
+
+Các Hệ số Phóng đại Phương sai (VIF) của tất cả các biến độc lập đều gần bằng 1, cho thấy không có hiện tượng đa cộng tuyến đáng kể trong mô hình. Tuy nhiên, kết quả kiểm định Breusch-Pagan (BP = 55,33, df = 5, p \< 0,001) chỉ ra sự hiện diện của phương sai của phần dư không đồng nhất theo các quan sát (heteroskedasticity). Do đó, để đánh giá đúng ý nghĩa thống kê của các hệ số, có thể cần sử dụng ước lượng sai số chuẩn điều chỉnh cho heteroskedasticity.
+
+## **Phần 2: Hồi quy logistics**
+
+## 14. Tạo bảng tần số các thuộc tính của biến “smoker”
+
+```{r}
+library(rio)
+library(margins)
+
+data2 <- import("Table8_1.dta")
+
+gmodels::CrossTable(data2$smoker)
+
+```
+
+## 15. Thực hiện hồi quy logistics theo mô hình sau và giải thích kết quả: smoker = β_0 + β_1age + β_2educ + β_3income + β_4pcigs79 + β_5ageeduc + β_6eduincome + ε
+
+```{r}
+
+logit_model2 <- glm(smoker ~ pcigs79 + age*educ + educ*income, data = data2, family = binomial(link = "logit"))
+summary(logit_model2)
+  
+
+```
+
+**Giải thích kết quả:**
+
+Với mức ý nghĩa 5%, giữ các yếu tố khác không đổi:
+
+Khi tuổi tăng 1 thì xác xuất lựa chọn hút thuốc giảm 4,275e-2 điểm phần trăm.
+
+Khi thu nhập tăng thì có ảnh hưởng đến lựa chọn hút thuốc. Tuy nhiên, ảnh hưởng này bị giảm đi nếu số năm đi học tăng thêm.
+
+## 16. Từ mô hình trên, hãy dự báo xác suất hút thuốc của từng đáp viên.
+
+```{r}
+data2$predicted_smoker_prob <- predict(logit_model2, type = "response")
+plot(data2$educ, data2$predicted_smoker_prob, xlab = "Education", ylab = "Predicted Probability of Smoking")
+knitr::kable(head(data2[, c("smoker", "predicted_smoker_prob")], 10),
+      caption = "Một phần mẫu dữ liệu dự báo xác suất hút thuốc của từng đáp viên")
+
+```
+
+## 17. Tính toán và giải thích tác động biên tại giá trị trung bình của mô hình trên.
+
+```{r}
+mfx <- margins(logit_model2)
+summary(mfx)
+plot(mfx)
+
+
+```
+
+**Giải thích kết quả:**
+
+Với mức ý nghĩa 5%, giữ các yếu tố khác không đổi:
+
+Với 1 tuổi tăng thêm mỗi năm, xác xuất lựa chọn hút thuốc giảm 0.37 điểm phần trăm.
+
+Với mỗi năm đi học tăng thêm 1 năm, xác xuất lựa chọn hút thuốc giảm 2.51 điểm phần trăm.
+
+## 18. Tính toán và giải thích tác động biên của các biến số đến xác suất hút thuốc của đáp viên 63 tuổi (age=63), có 10 năm đi học (educ=10), thu nhập của hộ gia đình là 20000 đôla Mỹ (income=20000), và giá thuốc lá 60 đôla Mỹ (pcigs79=60).
+
+```{r}
+smoker1 <- data.frame(age = 63, educ = 10, income = 20000, pcigs79 = 60)
+summary(margins(logit_model2,data=smoker1))
+```
+
+**Giải thích kết quả:**
+
+Với mức ý nghĩa 5%, giữ các yếu tố khác không đổi:
+
+Với 1 tuổi tăng thêm mỗi năm, xác xuất lựa chọn hút thuốc của đáp viên giảm 0.49 điểm phần trăm.
+
+Với mỗi năm đi học tăng thêm 1 năm, xác xuất lựa chọn hút thuốc của đáp viên giảm 1.61 điểm phần trăm.
+
+Khi thu nhập tăng thêm 1 triệu không ảnh hưởng đến xác xuất lựa chọn hút thuốc của đáp viên.
+
+## 19. Thực hiện hồi quy theo mô hình probit và giải thích kết quả: smoker = γ_0 + γage + γ_2educ + γ_3income + γ_4pcigs79 + γ_5ageeduc + γ_6eduincome + ε
+
+```{r}
+probit_model2 <- glm(smoker ~ pcigs79 + age*educ + educ*income, data = data2, family = binomial(link = "probit"))
+summary(probit_model2)
+```
+
+**Giải thích kết quả:**
+
+Với mức ý nghĩa 5%, giữ các yếu tố khác không đổi:
+
+Khi tuổi tăng 1 thì xác xuất lựa chọn hút thuốc giảm 2.67e-2 điểm phần trăm.
+
+Khi thu nhập tăng 1 triệu thì xác xuất lựa chọn hút thuốc tăng 5,22e-5 điểm phần trăm.. Tuy nhiên, ảnh hưởng này bị giảm đi -4.145e-06 điểm phần trăm nếu số năm đi học tăng thêm 1 năm.
+
+## 20. So sánh kết quả của mô hình logit và probit. Gợi ý lệnh: quietly, outreg2.
+
+```{r}
+AIC(logit_model2, probit_model2)
+BIC(logit_model2, probit_model2)
+```
+
+Mô hình probit khác biệt tốt hơn không đáng kể so với mô hình logit.
