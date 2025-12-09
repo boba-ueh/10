@@ -114,3 +114,26 @@ forecast_xgb <- as.numeric(predict(fit_xgb, as.matrix(test_ml[,-1])))
 # Bảng kết quả
 rmse_prophet <- sqrt(mean((forecast_prophet_values - test)^2))
 mae_prophet  <- mean(abs(forecast_prophet_values - test))
+
+accuracy_df <- data.frame(
+  Model = c("ARIMA", "ETS", "TBATS", "NNETAR", "Prophet", "LightGBM", "XGBoost"),
+  RMSE  = c(
+    accuracy(forecast_arima,  test)["Test set", "RMSE"],
+    accuracy(forecast_ets,    test)["Test set", "RMSE"],
+    accuracy(forecast_tbats,  test)["Test set", "RMSE"],
+    accuracy(forecast_nnetar, test)["Test set", "RMSE"],
+    rmse_prophet,
+    sqrt(mean((forecast_lgb - test)^2)),
+    sqrt(mean((forecast_xgb - test)^2))
+  ),
+  MAE   = c(
+    accuracy(forecast_arima,  test)["Test set", "MAE"],
+    accuracy(forecast_ets,    test)["Test set", "MAE"],
+    accuracy(forecast_tbats,  test)["Test set", "MAE"],
+    accuracy(forecast_nnetar, test)["Test set", "MAE"],
+    mae_prophet,
+    mean(abs(forecast_lgb - test)),
+    mean(abs(forecast_xgb - test))
+  )
+)
+print(accuracy_df)
